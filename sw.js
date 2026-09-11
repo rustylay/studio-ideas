@@ -1,8 +1,9 @@
 // Minimal offline cache so the installed app opens without signal.
 // CACHE names the store; changing it discards the old one on activate. Bumping
 // it is no longer how a new build reaches the phone — see the fetch handler.
-const CACHE = 'studio-ideas-v4';
-const FILES = ['./', './index.html', './app.js', './lib.js', './store.js', './sw.js'];
+const CACHE = 'studio-ideas-v5';
+const FILES = ['./', './index.html', './app.js', './lib.js', './store.js', './sw.js',
+  './manifest.json', './icon-192.png', './icon-512.png', './icon-maskable-512.png'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES)));
