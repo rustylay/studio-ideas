@@ -26,7 +26,7 @@
   #title:focus,#description:focus,#with:focus{border-bottom-color:var(--blue)}
   ::placeholder{color:var(--mute);font-weight:300}
 
-  .row{display:flex;gap:10px;align-items:center;margin-top:14px}
+  .row{display:flex;gap:10px;align-items:center;margin-top:14px;flex-wrap:wrap}
   .row .spacer{flex:1}
   button{font:600 16px inherit;padding:12px 18px;border-radius:999px;
     border:1.5px solid var(--ink);background:transparent;color:var(--ink);
@@ -74,7 +74,9 @@
     <input id="with" placeholder="with: (optional)" autocomplete="off">
     <div id="thumbs"></div>
     <div class="row">
+      <button id="takePhoto">Take photo</button>
       <button id="addImage">Add image</button>
+      <input id="camera" type="file" accept="image/*" capture="environment" hidden>
       <input id="images" type="file" accept="image/*" multiple hidden>
       <span class="spacer"></span>
       <button class="primary" id="save" disabled>Save</button>

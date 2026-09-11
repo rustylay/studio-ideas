@@ -7,6 +7,7 @@ const els = {
   title: $('#title'), description: $('#description'), with: $('#with'),
   save: $('#save'), list: $('#list'), heading: $('#heading'), toast: $('#toast'),
   addImage: $('#addImage'), images: $('#images'), thumbs: $('#thumbs'),
+  takePhoto: $('#takePhoto'), camera: $('#camera'),
   share: $('#share'), clear: $('#clear'), fallback: $('#fallback'),
 };
 
@@ -71,10 +72,14 @@ function renderThumbs(){
   });
 }
 
+// Two ways in, because they are two different moments: a sketch or a thing just
+// seen is a camera moment, a screenshot or an older photo is a gallery moment.
+// One picker in between would tax both.
+els.takePhoto.addEventListener('click', () => els.camera.click());
 els.addImage.addEventListener('click', () => els.images.click());
 
-els.images.addEventListener('change', async () => {
-  for (const file of els.images.files){
+async function attach(input){
+  for (const file of input.files){
     try {
       const blob = await downscale(file);
       const key = `img-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -83,9 +88,12 @@ els.images.addEventListener('change', async () => {
       say('Could not read that image');
     }
   }
-  els.images.value = '';
+  input.value = '';
   renderThumbs();
-});
+}
+
+els.camera.addEventListener('change', () => attach(els.camera));
+els.images.addEventListener('change', () => attach(els.images));
 
 // Only the title gates Save. Everything else is optional by design.
 function syncSaveButton(){ els.save.disabled = !els.title.value.trim(); }
