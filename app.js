@@ -173,6 +173,13 @@ function render(){
 // A single image that fails to read from storage (missing or a genuine IndexedDB
 // error) is skipped rather than aborting the whole export — the idea's text must
 // still go out even if one of its pictures is gone.
+// Says what happened and leaves it on screen, with the text to copy by hand.
+function notice(message, markdown){
+  els.fallback.hidden = false;
+  els.fallback.querySelector('h2').textContent = message;
+  els.fallback.querySelector('textarea').value = markdown;
+}
+
 async function buildPayload(items){
   const files = [];
   const withNames = [];
@@ -246,8 +253,6 @@ const DESTINATIONS = [
         setTimeout(() => URL.revokeObjectURL(url), 5000);
       }
       say('Saved to Downloads');
-      els.fallback.hidden = false;
-      els.fallback.querySelector('textarea').value = p.markdown;
     },
   },
 ];
@@ -297,14 +302,28 @@ els.share.addEventListener('click', async () => {
           return;
         }
         render();
-        if (held){
-          say(`Text only — ${held} image${held > 1 ? 's' : ''} stayed on this phone`);
+        if (dest.name === 'share sheet'){
+          say('Shared');
+        } else {
+          // A toast lasts under two seconds and is missable. A degraded path is
+          // exactly what Rusty has to know about, so it stays on screen.
+          notice(held
+            ? `The share sheet was not available, so this went out as ${dest.name}. `
+              + `Text only — ${held} image${held > 1 ? 's' : ''} stayed on this phone.`
+            : `The share sheet was not available, so this went out as ${dest.name}.`,
+            payload.markdown);
         }
         return;
       } catch (err){
-        // A cancelled share sheet is Rusty changing his mind, not a failure.
-        if (err && err.name === 'AbortError'){ say('Share cancelled'); return; }
-        // Anything else: fall through and try the next destination.
+        // A cancelled share sheet, or a denied permission, is Rusty saying no.
+        // Trying the next destination would be routing around his answer — and
+        // that is exactly how a denied clipboard ended up silently marking two
+        // ideas shared through a fallback he never saw.
+        if (err && (err.name === 'AbortError' || err.name === 'NotAllowedError')){
+          say('Not shared — nothing left the phone');
+          return;
+        }
+        // A genuine failure: fall through and try the next destination.
       }
     }
     say('Could not share');

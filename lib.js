@@ -44,8 +44,12 @@ export function imageFileName(ts, title, n){
   return `ideas-${stampCompact(ts)}-${slug}-${n}.jpg`;
 }
 
+// .txt, not .md: Android vets a shared file by its extension against a short
+// allowlist, and .md is not on it — one rejected member makes the whole bundle
+// unshareable, photos included. The contents are still markdown, and /grab
+// reads either extension.
 export function markdownFileName(ts){
-  return `ideas-${stampDate(ts)}.md`;
+  return `ideas-${stampDate(ts)}.txt`;
 }
 
 // Two ideas sharing a title on the same day produce the same filename, and two
