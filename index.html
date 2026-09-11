@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ideas</title>
+<meta name="theme-color" content="#F7F8F6">
+<link rel="manifest" href='data:application/manifest+json,{"name":"Studio Ideas","short_name":"Ideas","start_url":".","display":"standalone","background_color":"%23F7F8F6","theme_color":"%23F7F8F6","icons":[{"src":"data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 100 100%27%3E%3Crect width=%27100%27 height=%27100%27 rx=%2722%27 fill=%27%231E4FBF%27/%3E%3Ccircle cx=%2750%27 cy=%2750%27 r=%2717%27 fill=%27%23F7F8F6%27/%3E%3C/svg%3E","sizes":"any","type":"image/svg+xml","purpose":"any"}]}'>
+<style>
+  :root{
+    --paper:#F7F8F6; --ink:#1A1F1C; --mute:#6E736F; --line:#D9DCD8; --blue:#1E4FBF;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--paper);color:var(--ink);
+    font:17px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    -webkit-text-size-adjust:100%}
+  body{padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
+  main{max-width:640px;margin:0 auto;padding:16px 16px 40px}
+
+  input,textarea{width:100%;border:0;background:transparent;color:var(--ink);
+    outline:none;font-family:inherit;resize:none}
+  #title{font:400 26px/1.3 inherit;padding:10px 0;border-bottom:2px solid var(--ink)}
+  #description{font:400 18px/1.45 inherit;padding:10px 0;min-height:22vh;
+    border-bottom:1px solid var(--line)}
+  #with{font:400 16px/1.4 inherit;padding:10px 0;border-bottom:1px solid var(--line)}
+  #title:focus,#description:focus,#with:focus{border-bottom-color:var(--blue)}
+  ::placeholder{color:var(--mute);font-weight:300}
+
+  .row{display:flex;gap:10px;align-items:center;margin-top:14px}
+  .row .spacer{flex:1}
+  button{font:600 16px inherit;padding:12px 18px;border-radius:999px;
+    border:1.5px solid var(--ink);background:transparent;color:var(--ink);
+    cursor:pointer;touch-action:manipulation}
+  button.primary{background:var(--ink);color:var(--paper)}
+  button.primary:disabled{opacity:.3}
+  button.quiet{border-color:transparent;color:var(--mute);padding-left:8px;padding-right:8px}
+  button:focus-visible{outline:3px solid var(--blue);outline-offset:2px}
+
+  #thumbs{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+  #thumbs figure{margin:0;position:relative}
+  #thumbs img{width:72px;height:72px;object-fit:cover;border-radius:8px;display:block}
+  /* 32px, not 24: a delete control on a phone has to be hittable with a thumb.
+     Still reads as a small badge against the 72px thumbnail. */
+  #thumbs button{position:absolute;top:-8px;right:-8px;padding:0;width:32px;height:32px;
+    line-height:1;border-radius:50%;background:var(--ink);color:var(--paper);
+    font-size:17px;font-weight:700}
+
+  h2{font-size:14px;font-weight:600;color:var(--mute);margin:36px 0 8px}
+  ul{list-style:none;margin:0;padding:0}
+  li{border-top:1px solid var(--line);padding:12px 0}
+  li:last-child{border-bottom:1px solid var(--line)}
+  .meta{display:flex;gap:8px;align-items:center;font-size:13px;color:var(--mute);
+    margin-bottom:4px}
+  .meta .dot{width:8px;height:8px;border-radius:50%;background:var(--blue);flex:none}
+  .meta .dot.sent{background:var(--line)}
+  .idea-title{font-weight:600}
+  .idea-body{white-space:pre-wrap;word-break:break-word;color:var(--mute);font-size:15px}
+  .collapsed .idea-body{display:-webkit-box;-webkit-line-clamp:2;
+    -webkit-box-orient:vertical;overflow:hidden}
+  .empty{color:var(--mute);padding:20px 0}
+
+  .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);
+    background:var(--ink);color:var(--paper);padding:10px 16px;border-radius:999px;
+    font-size:14px;opacity:0;transition:opacity .2s;pointer-events:none}
+  .toast.show{opacity:1}
+  @media (prefers-reduced-motion:reduce){.toast{transition:none}}
+</style>
+</head>
+<body>
+<main>
+  <section class="capture">
+    <input id="title" placeholder="Idea" autofocus enterkeyhint="next" autocomplete="off">
+    <textarea id="description" placeholder="More, if there is more (optional)"></textarea>
+    <input id="with" placeholder="with: (optional)" autocomplete="off">
+    <div id="thumbs"></div>
+    <div class="row">
+      <button id="addImage">Add image</button>
+      <input id="images" type="file" accept="image/*" multiple hidden>
+      <span class="spacer"></span>
+      <button class="primary" id="save" disabled>Save</button>
+    </div>
+  </section>
+
+  <h2 id="heading">Saved</h2>
+  <ul id="list"></ul>
+
+  <div class="row" style="margin-top:20px">
+    <button id="share">Share</button>
+    <span class="spacer"></span>
+    <button class="quiet" id="clear">Clear shared</button>
+  </div>
+
+  <section id="fallback" hidden>
+    <h2>Markdown, if you'd rather copy it by hand</h2>
+    <textarea readonly style="min-height:30vh;font-size:15px" onclick="this.select()"></textarea>
+  </section>
+</main>
+<div class="toast" id="toast"></div>
+<script type="module" src="./app.js"></script>
+</body>
+</html>
