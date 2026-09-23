@@ -4,33 +4,52 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Ideas</title>
-<meta name="theme-color" content="#F7F8F6">
+<meta name="theme-color" content="#121412">
+<script>
+  // Dark is the default: the app is mostly opened in the middle of the night.
+  // Runs before the page paints, so a light-mode choice never flashes dark and vice versa.
+  try{ if(localStorage.getItem('theme')==='light') document.documentElement.dataset.theme='light' }catch(e){}
+  if(document.documentElement.dataset.theme==='light')
+    document.querySelector('meta[name=theme-color]').content='#F7F8F6';
+</script>
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon-192.png" sizes="192x192" type="image/png">
 <link rel="apple-touch-icon" href="icon-192.png">
 <style>
+  /* Night: text at 80% of a warm off-white, so the screen reads as dim, not lit. */
   :root{
+    --paper:#121412; --ink:#C5C2BA; --mute:#82807B; --line:#2A2D2A; --blue:#4F6AA8;
+    color-scheme:dark;
+  }
+  :root[data-theme="light"]{
     --paper:#F7F8F6; --ink:#1A1F1C; --mute:#6E736F; --line:#D9DCD8; --blue:#1E4FBF;
+    color-scheme:light;
   }
   *{box-sizing:border-box}
   html,body{margin:0;background:var(--paper);color:var(--ink);
     font:17px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
     -webkit-text-size-adjust:100%}
   body{padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
-  main{max-width:640px;margin:0 auto;padding:16px 16px 40px}
+  main{max-width:640px;margin:0 auto;padding:16px 16px 40px;position:relative}
+
+  #theme{position:absolute;top:12px;right:16px;width:36px;height:36px;padding:0;
+    border:1px solid var(--line);display:grid;place-items:center}
+  #theme svg{width:18px;height:18px;stroke:var(--mute);fill:none;stroke-width:1.8}
+  #theme .moon,:root[data-theme="light"] #theme .sun{display:none}
+  :root[data-theme="light"] #theme .moon{display:block}
 
   input,textarea{width:100%;border:0;background:transparent;color:var(--ink);
     outline:none;font-family:inherit;resize:none}
-  #title{font:400 26px/1.3 inherit;padding:10px 0;border-bottom:2px solid var(--ink)}
-  #description{font:400 18px/1.45 inherit;padding:10px 0;min-height:22vh;
+  #title{font-weight:400;font-size:26px;line-height:1.3;padding:10px 48px 10px 0;border-bottom:2px solid var(--ink)}
+  #description{font-weight:400;font-size:18px;line-height:1.45;padding:10px 0;min-height:22vh;
     border-bottom:1px solid var(--line)}
-  #with{font:400 16px/1.4 inherit;padding:10px 0;border-bottom:1px solid var(--line)}
+  #with{font-weight:400;font-size:16px;line-height:1.4;padding:10px 0;border-bottom:1px solid var(--line)}
   #title:focus,#description:focus,#with:focus{border-bottom-color:var(--blue)}
   ::placeholder{color:var(--mute);font-weight:300}
 
   .row{display:flex;gap:10px;align-items:center;margin-top:14px;flex-wrap:wrap}
   .row .spacer{flex:1}
-  button{font:600 16px inherit;padding:12px 18px;border-radius:999px;
+  button{font-weight:600;font-size:16px;padding:12px 14px;border-radius:999px;
     border:1.5px solid var(--ink);background:transparent;color:var(--ink);
     cursor:pointer;touch-action:manipulation}
   button.primary{background:var(--ink);color:var(--paper)}
@@ -70,6 +89,10 @@
 </head>
 <body>
 <main>
+  <button id="theme" aria-label="Switch light or dark">
+    <svg class="sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+    <svg class="moon" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>
+  </button>
   <section class="capture">
     <input id="title" placeholder="Idea" autofocus enterkeyhint="next" autocomplete="off">
     <textarea id="description" placeholder="More, if there is more (optional)"></textarea>
@@ -100,6 +123,15 @@
   </section>
 </main>
 <div class="toast" id="toast"></div>
+<script>
+  document.getElementById('theme').addEventListener('click', () => {
+    const root = document.documentElement;
+    const light = root.dataset.theme !== 'light';
+    if (light) root.dataset.theme = 'light'; else delete root.dataset.theme;
+    document.querySelector('meta[name=theme-color]').content = light ? '#F7F8F6' : '#121412';
+    try{ localStorage.setItem('theme', light ? 'light' : 'dark') }catch(e){}
+  });
+</script>
 <script type="module" src="./app.js"></script>
 </body>
 </html>
