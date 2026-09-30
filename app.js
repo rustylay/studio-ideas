@@ -1,6 +1,7 @@
 import { shortStamp, fitDimensions, ideasToMarkdown, imageFileName, markdownFileName,
-         uniqueFileName } from './lib.js';
-import { loadIdeas, saveIdeas, putImage, getImage, deleteImages } from './store.js';
+         uniqueFileName, noteSubject } from './lib.js';
+import { loadIdeas, saveIdeas, putImage, getImage, deleteImages,
+         loadNotes, saveNotes } from './store.js';
 
 const $ = s => document.querySelector(s);
 const els = {
@@ -9,6 +10,10 @@ const els = {
   addImage: $('#addImage'), images: $('#images'), thumbs: $('#thumbs'),
   takePhoto: $('#takePhoto'), camera: $('#camera'),
   share: $('#share'), clear: $('#clear'), fallback: $('#fallback'),
+  bar: $('#bar'), back: $('#back'), home: $('#home'), ideaView: $('#ideaView'),
+  noteView: $('#noteView'), goIdea: $('#goIdea'), goNote: $('#goNote'),
+  noteText: $('#noteText'), saveNote: $('#saveNote'), noteList: $('#noteList'),
+  noteHeading: $('#noteHeading'),
 };
 
 let ideas = loadIdeas();
@@ -366,6 +371,131 @@ els.clear.addEventListener('click', async () => {
     say('Cleared — some image data is still taking up space');
   }
 });
+
+// ---- Notes -----------------------------------------------------------------
+// Reminders and quick thoughts: text only, kept on the phone, and never part of
+// the ideas pipeline. A note is finished when it is deleted; Send hands the text
+// to the phone's share sheet so it can go by email or anywhere else.
+
+let notes = loadNotes();
+let openNoteId = null;
+
+function syncSaveNote(){ els.saveNote.disabled = !els.noteText.value.trim(); }
+els.noteText.addEventListener('input', syncSaveNote);
+
+els.saveNote.addEventListener('click', () => {
+  const text = els.noteText.value.trim();
+  if (!text) return;
+  const record = { id: Date.now(), ts: Date.now(), text };
+  notes.unshift(record);
+  try {
+    saveNotes(notes);
+  } catch {
+    // Leave the typed note on screen so Save can be tried again.
+    notes.shift();
+    say('Could not save — try again');
+    return;
+  }
+  els.noteText.value = '';
+  syncSaveNote(); renderNotes(); say('Saved');
+  // Drop the keyboard so the list underneath is visible.
+  els.noteText.blur();
+});
+
+async function sendNote(note){
+  const data = { title: noteSubject(note.text), text: note.text };
+  if (navigator.share){
+    try {
+      await navigator.share(data);
+      return;
+    } catch (err){
+      if (err && err.name === 'AbortError'){ say('Not sent'); return; }
+      // A genuine failure: fall through to the clipboard.
+    }
+  }
+  try {
+    await navigator.clipboard.writeText(note.text);
+    say('Copied');
+  } catch {
+    say('Could not send');
+  }
+}
+
+function deleteNote(note){
+  if (!confirm('Delete this note?')) return;
+  const kept = notes.filter(n => n.id !== note.id);
+  try {
+    saveNotes(kept);
+  } catch {
+    say('Could not delete — try again');
+    return;
+  }
+  notes = kept;
+  renderNotes();
+}
+
+function renderNotes(){
+  els.noteHeading.textContent = notes.length ? `Notes · ${notes.length}` : 'Notes';
+  els.noteList.innerHTML = '';
+  if (!notes.length){
+    els.noteList.innerHTML = '<li class="empty">Nothing yet. Tap above and dictate.</li>';
+    return;
+  }
+  for (const note of notes){
+    const open = note.id === openNoteId;
+    const li = document.createElement('li');
+    li.className = open ? '' : 'collapsed';
+    li.innerHTML = `
+      <div class="meta"><span>${shortStamp(note.ts)}</span></div>
+      <div class="note-text">${escapeHtml(note.text)}</div>
+      ${open ? `<div class="note-actions">
+        <button type="button" data-act="send">Send</button>
+        <button type="button" class="quiet" data-act="delete">Delete</button>
+      </div>` : ''}`;
+    li.addEventListener('click', e => {
+      const act = e.target.closest('button') && e.target.closest('button').dataset.act;
+      if (act === 'send'){ sendNote(note); return; }
+      if (act === 'delete'){ deleteNote(note); return; }
+      openNoteId = open ? null : note.id;
+      renderNotes();
+    });
+    els.noteList.appendChild(li);
+  }
+}
+
+// ---- Which screen -----------------------------------------------------------
+// The opening screen is the bare URL; each of the other two is a hash, so the
+// phone's own Back button steps from a screen to the opening one instead of
+// leaving the app.
+
+let shown = null;
+let pushed = false;   // true once we have added a history entry ourselves
+
+function apply(){
+  const view = location.hash === '#idea' ? 'idea' : location.hash === '#note' ? 'note' : 'home';
+  els.home.hidden = view !== 'home';
+  els.back.hidden = view === 'home';
+  els.ideaView.hidden = view !== 'idea';
+  els.noteView.hidden = view !== 'note';
+  // Idea capture used to open with the title focused; keep that. Notes wait for a
+  // tap on the field, as asked.
+  if (view === 'idea' && shown !== 'idea') els.title.focus();
+  shown = view;
+}
+
+function go(view){ pushed = true; location.hash = view; }
+els.goIdea.addEventListener('click', () => go('idea'));
+els.goNote.addEventListener('click', () => go('note'));
+els.back.addEventListener('click', () => {
+  if (pushed){ history.back(); return; }
+  // Landed straight on a screen (a reload, say): no entry of ours to step back to.
+  history.replaceState(null, '', location.pathname + location.search);
+  apply();
+});
+window.addEventListener('hashchange', apply);
+
+renderNotes();
+apply();
 
 render();
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')){

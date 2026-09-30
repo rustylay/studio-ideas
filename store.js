@@ -19,6 +19,23 @@ export function saveIdeas(ideas){
   localStorage.setItem(KEY, JSON.stringify(ideas));
 }
 
+// Notes are text only and live apart from ideas: a different key, so nothing
+// already captured is touched, and no IndexedDB because there are no images.
+const NOTES_KEY = 'studio-notes-v1';
+
+export function loadNotes(){
+  try {
+    const raw = JSON.parse(localStorage.getItem(NOTES_KEY));
+    return Array.isArray(raw) ? raw : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveNotes(notes){
+  localStorage.setItem(NOTES_KEY, JSON.stringify(notes));
+}
+
 let dbPromise = null;
 
 function db(){

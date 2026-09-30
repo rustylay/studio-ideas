@@ -103,3 +103,11 @@ export function fitDimensions(w, h, max){
   const k = max / long;
   return { w: Math.round(w * k), h: Math.round(h * k) };
 }
+
+// The subject line for a shared note: its first non-empty line, kept short enough
+// that an email client shows it whole. A note that is only whitespace never gets
+// here (Save is gated on text), but the fallback keeps the function total.
+export function noteSubject(text, max = 60){
+  const first = String(text || '').split('\n').map(l => l.trim()).find(Boolean) || 'Note';
+  return first.length <= max ? first : first.slice(0, max - 1).trimEnd() + '…';
+}
