@@ -83,6 +83,7 @@ export function escapeBody(body){
 export function ideaToMarkdown(idea){
   const lines = [`## ${String(idea.title).trim()}`, `captured: ${stampDateTime(idea.ts)}`];
   const who = String(idea.with || '').trim();
+  if (idea.edited) lines.push(`edited: ${stampDateTime(idea.edited)}`);
   if (who) lines.push(`with: ${who}`);
   const names = idea.imageNames || [];
   if (names.length) lines.push(`images: ${names.join(', ')}`);

@@ -14,6 +14,8 @@ const els = {
   noteView: $('#noteView'), goIdea: $('#goIdea'), goNote: $('#goNote'),
   noteText: $('#noteText'), saveNote: $('#saveNote'), noteList: $('#noteList'),
   noteHeading: $('#noteHeading'),
+  editBar: $('#editBar'), cancelEdit: $('#cancelEdit'),
+  noteEditBar: $('#noteEditBar'), cancelNoteEdit: $('#cancelNoteEdit'),
 };
 
 let ideas = loadIdeas();
@@ -109,47 +111,109 @@ els.title.addEventListener('keydown', e => {
   if (e.key === 'Enter'){ e.preventDefault(); els.description.focus(); }
 });
 
+// The idea being edited, or null when a new one is being written. Editing reuses
+// the capture fields rather than adding a second form: same title, description,
+// with: and photos, so there is nothing new to learn.
+let editingId = null;
+
+function clearForm(){
+  pendingImages.forEach(img => URL.revokeObjectURL(img.url));
+  pendingImages = [];
+  els.title.value = ''; els.description.value = ''; els.with.value = '';
+  renderThumbs(); syncSaveButton();
+}
+
+function leaveEditing(){
+  editingId = null;
+  els.editBar.hidden = true;
+  els.save.textContent = 'Save';
+}
+
+els.cancelEdit.addEventListener('click', () => { leaveEditing(); clearForm(); });
+
+async function startEdit(idea){
+  const typed = els.title.value.trim() || els.description.value.trim() || pendingImages.length;
+  if (typed && !confirm('Replace what you have typed with this idea?')) return;
+  // Pull the stored photos back in so they can be kept, removed, or joined by
+  // new ones. A photo whose data has vanished is simply not carried over.
+  const loaded = [];
+  for (const key of imagesOf(idea)){
+    try {
+      const blob = await getImage(key);
+      if (blob) loaded.push({ key, blob, url: URL.createObjectURL(blob) });
+    } catch {}
+  }
+  clearForm();
+  els.title.value = idea.title; els.description.value = idea.description || '';
+  els.with.value = idea.with || '';
+  pendingImages = loaded;
+  editingId = idea.id;
+  els.editBar.hidden = false;
+  els.save.textContent = 'Update';
+  renderThumbs(); syncSaveButton();
+  window.scrollTo(0, 0);
+  els.title.focus();
+}
+
 els.save.addEventListener('click', async () => {
   const title = els.title.value.trim();
   if (!title) return;
   els.save.disabled = true;
-  const keys = [];
+  // If the idea being edited was cleared away meanwhile, this saves as a new one.
+  const old = editingId === null ? null : ideas.find(i => i.id === editingId) || null;
+  const before = old ? imagesOf(old) : [];
+  const fresh = [];   // keys this save adds, so a failure removes only those
   try {
     for (const img of pendingImages){
       await putImage(img.key, img.blob);
-      keys.push(img.key);
+      if (!before.includes(img.key)) fresh.push(img.key);
     }
   } catch {
     // Storage can fail mid-write; the idea the user just typed must survive the
     // failure, so leave the fields and pendingImages alone and let them retry Save.
-    if (keys.length) deleteImages(keys).catch(() => {});
+    if (fresh.length) deleteImages(fresh).catch(() => {});
     say('Could not save — try again');
     syncSaveButton();
     return;
   }
-  const record = {
-    id: Date.now(), ts: Date.now(), title,
+  const keys = pendingImages.map(img => img.key);
+  const fields = {
+    title,
     description: els.description.value.trim(),
     with: els.with.value.trim(),
     images: keys, exported: false,
   };
-  ideas.unshift(record);
+  let at = -1;
+  if (old){
+    at = ideas.indexOf(old);
+    // Keeps its place and its captured time. An idea that had already gone out is
+    // marked edited, so the next share tells /grab this is a correction and not a
+    // second idea.
+    const edited = old.exported || old.edited ? { edited: Date.now() } : {};
+    ideas[at] = { ...old, ...fields, ...edited };
+  } else {
+    ideas.unshift({ id: Date.now(), ts: Date.now(), ...fields });
+  }
   try {
     saveIdeas(ideas);
   } catch {
     // localStorage can refuse the write under quota pressure. Unwind completely:
-    // take the record back out, drop the blobs it would have referenced, and
-    // leave the typed idea on screen so Save can be tried again.
-    ideas.shift();
-    if (keys.length) deleteImages(keys).catch(() => {});
+    // put the old record back, drop the blobs this save added, and leave the
+    // typed idea on screen so Save can be tried again.
+    if (old) ideas[at] = old; else ideas.shift();
+    if (fresh.length) deleteImages(fresh).catch(() => {});
     say('Could not save — try again');
     syncSaveButton();
     return;
   }
-  pendingImages.forEach(img => URL.revokeObjectURL(img.url));
-  pendingImages = [];
-  els.title.value = ''; els.description.value = ''; els.with.value = '';
-  renderThumbs(); syncSaveButton(); render(); say('Saved'); els.title.focus();
+  // Photos removed during the edit are no longer referenced by anything.
+  const gone = before.filter(k => !keys.includes(k));
+  if (gone.length) deleteImages(gone).catch(() => {});
+  const resent = old && old.exported;
+  leaveEditing();
+  clearForm(); render();
+  say(old ? (resent ? 'Updated — will be shared again' : 'Updated') : 'Saved');
+  els.title.focus();
 });
 
 function render(){
@@ -169,11 +233,16 @@ function render(){
     li.innerHTML = `
       <div class="meta">
         <span class="dot ${idea.exported ? 'sent' : ''}"></span>
-        <span>${shortStamp(idea.ts)}${idea.exported ? ' · shared' : ''}${who}${pics}</span>
+        <span>${shortStamp(idea.ts)}${idea.exported ? ' · shared' : ''}${idea.edited ? ' · edited' : ''}${who}${pics}</span>
       </div>
       <div class="idea-title">${escapeHtml(idea.title)}</div>
-      ${idea.description ? `<div class="idea-body">${escapeHtml(idea.description)}</div>` : ''}`;
-    li.addEventListener('click', () => {
+      ${idea.description ? `<div class="idea-body">${escapeHtml(idea.description)}</div>` : ''}
+      ${idea.id === openId ? `<div class="note-actions">
+        <button type="button" data-act="edit">Edit</button>
+      </div>` : ''}`;
+    li.addEventListener('click', e => {
+      const btn = e.target.closest('button');
+      if (btn && btn.dataset.act === 'edit'){ startEdit(idea); return; }
       openId = openId === idea.id ? null : idea.id;
       render();
     });
@@ -383,21 +452,56 @@ let openNoteId = null;
 function syncSaveNote(){ els.saveNote.disabled = !els.noteText.value.trim(); }
 els.noteText.addEventListener('input', syncSaveNote);
 
+// The note being edited, or null when a new one is being written.
+let editingNoteId = null;
+
+function leaveNoteEditing(){
+  editingNoteId = null;
+  els.noteEditBar.hidden = true;
+  els.saveNote.textContent = 'Save';
+}
+
+els.cancelNoteEdit.addEventListener('click', () => {
+  leaveNoteEditing();
+  els.noteText.value = '';
+  syncSaveNote();
+});
+
+function startNoteEdit(note){
+  if (els.noteText.value.trim() && !confirm('Replace what you have typed with this note?')) return;
+  editingNoteId = note.id;
+  els.noteText.value = note.text;
+  els.noteEditBar.hidden = false;
+  els.saveNote.textContent = 'Update';
+  syncSaveNote();
+  window.scrollTo(0, 0);
+  els.noteText.focus();
+}
+
 els.saveNote.addEventListener('click', () => {
   const text = els.noteText.value.trim();
   if (!text) return;
-  const record = { id: Date.now(), ts: Date.now(), text };
-  notes.unshift(record);
+  const old = editingNoteId === null ? null : notes.find(n => n.id === editingNoteId) || null;
+  let at = -1;
+  if (old){
+    // Keeps its place and its time in the list.
+    at = notes.indexOf(old);
+    notes[at] = { ...old, text };
+  } else {
+    notes.unshift({ id: Date.now(), ts: Date.now(), text });
+  }
   try {
     saveNotes(notes);
   } catch {
     // Leave the typed note on screen so Save can be tried again.
-    notes.shift();
+    if (old) notes[at] = old; else notes.shift();
     say('Could not save — try again');
     return;
   }
+  const wasEdit = !!old;
+  leaveNoteEditing();
   els.noteText.value = '';
-  syncSaveNote(); renderNotes(); say('Saved');
+  syncSaveNote(); renderNotes(); say(wasEdit ? 'Updated' : 'Saved');
   // Drop the keyboard so the list underneath is visible.
   els.noteText.blur();
 });
@@ -450,11 +554,13 @@ function renderNotes(){
       <div class="note-text">${escapeHtml(note.text)}</div>
       ${open ? `<div class="note-actions">
         <button type="button" data-act="send">Send</button>
+        <button type="button" data-act="edit">Edit</button>
         <button type="button" class="quiet" data-act="delete">Delete</button>
       </div>` : ''}`;
     li.addEventListener('click', e => {
       const act = e.target.closest('button') && e.target.closest('button').dataset.act;
       if (act === 'send'){ sendNote(note); return; }
+      if (act === 'edit'){ startNoteEdit(note); return; }
       if (act === 'delete'){ deleteNote(note); return; }
       openNoteId = open ? null : note.id;
       renderNotes();
