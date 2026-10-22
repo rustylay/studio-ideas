@@ -112,3 +112,27 @@ export function noteSubject(text, max = 60){
   const first = String(text || '').split('\n').map(l => l.trim()).find(Boolean) || 'Note';
   return first.length <= max ? first : first.slice(0, max - 1).trimEnd() + '…';
 }
+
+// The Names time buttons, in days. Rolling windows rather than calendar ones: on
+// the 2nd of a month "Last month" still has to find someone met last week, and
+// "met them in the spring" is often all that is remembered.
+export const NAME_SPANS = { month: 30, quarter: 91, year: 365, all: Infinity };
+
+// Lowercased and stripped of accents, so "jose" finds José.
+function fold(s){
+  return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+}
+
+// The people matching a search. Every typed word must appear somewhere in the
+// name or the description, in any order — "boat atlanta" finds the restorer met
+// at the Atlanta show. An unknown span means everyone.
+export function filterNames(people, query, span = 'all', now = Date.now()){
+  const days = NAME_SPANS[span] ?? Infinity;
+  const since = now - days * 86400000;
+  const words = fold(query).split(/\s+/).filter(Boolean);
+  return people.filter(p => {
+    if (days !== Infinity && !(p.ts >= since)) return false;
+    const text = fold(`${p.name || ''}\n${p.description || ''}`);
+    return words.every(w => text.includes(w));
+  });
+}

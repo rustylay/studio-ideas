@@ -1,7 +1,7 @@
 import { shortStamp, fitDimensions, ideasToMarkdown, imageFileName, markdownFileName,
-         uniqueFileName, noteSubject } from './lib.js';
+         uniqueFileName, noteSubject, filterNames } from './lib.js';
 import { loadIdeas, saveIdeas, putImage, getImage, deleteImages,
-         loadNotes, saveNotes } from './store.js';
+         loadNotes, saveNotes, loadNames, saveNames } from './store.js';
 
 const $ = s => document.querySelector(s);
 const els = {
@@ -16,6 +16,13 @@ const els = {
   noteHeading: $('#noteHeading'),
   editBar: $('#editBar'), cancelEdit: $('#cancelEdit'),
   noteEditBar: $('#noteEditBar'), cancelNoteEdit: $('#cancelNoteEdit'),
+  nameView: $('#nameView'), goName: $('#goName'),
+  personName: $('#personName'), personDesc: $('#personDesc'), saveName: $('#saveName'),
+  nameThumbs: $('#nameThumbs'), nameTakePhoto: $('#nameTakePhoto'), nameCamera: $('#nameCamera'),
+  nameAddImage: $('#nameAddImage'), nameImages: $('#nameImages'),
+  nameHeading: $('#nameHeading'), nameList: $('#nameList'), nameFind: $('#nameFind'),
+  nameSearch: $('#nameSearch'), nameSpans: $('#nameSpans'),
+  nameEditBar: $('#nameEditBar'), cancelNameEdit: $('#cancelNameEdit'),
 };
 
 let ideas = loadIdeas();
@@ -64,20 +71,25 @@ function imagesOf(idea){
   return Array.isArray(idea && idea.images) ? idea.images : [];
 }
 
-function renderThumbs(){
-  els.thumbs.innerHTML = '';
-  pendingImages.forEach((img, i) => {
+// The row of photos under a capture form, each with its remove badge. Shared by
+// ideas and names; `redraw` is the caller's own render, so a removal redraws the
+// right row.
+function renderTray(el, list, redraw){
+  el.innerHTML = '';
+  list.forEach((img, i) => {
     const fig = document.createElement('figure');
     fig.innerHTML = `<img src="${img.url}" alt="">
       <button type="button" aria-label="Remove image">×</button>`;
     fig.querySelector('button').addEventListener('click', () => {
       URL.revokeObjectURL(img.url);
-      pendingImages.splice(i, 1);
-      renderThumbs();
+      list.splice(i, 1);
+      redraw();
     });
-    els.thumbs.appendChild(fig);
+    el.appendChild(fig);
   });
 }
+
+function renderThumbs(){ renderTray(els.thumbs, pendingImages, renderThumbs); }
 
 // Two ways in, because they are two different moments: a sketch or a thing just
 // seen is a camera moment, a screenshot or an older photo is a gallery moment.
@@ -85,17 +97,25 @@ function renderThumbs(){
 els.takePhoto.addEventListener('click', () => els.camera.click());
 els.addImage.addEventListener('click', () => els.images.click());
 
-async function attach(input){
+// Reads the picked files into downscaled, not-yet-stored photos. Shared by ideas
+// and names.
+async function readPhotos(input){
+  const out = [];
   for (const file of input.files){
     try {
       const blob = await downscale(file);
       const key = `img-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-      pendingImages.push({ key, blob, url: URL.createObjectURL(blob) });
+      out.push({ key, blob, url: URL.createObjectURL(blob) });
     } catch {
       say('Could not read that image');
     }
   }
   input.value = '';
+  return out;
+}
+
+async function attach(input){
+  pendingImages.push(...await readPhotos(input));
   renderThumbs();
 }
 
@@ -569,6 +589,225 @@ function renderNotes(){
   }
 }
 
+// ---- Names -----------------------------------------------------------------
+// People met, written down before the name slips. Kept on the phone like notes —
+// they never reach /grab — but with photos like ideas: a face, a business card,
+// a badge. Found again by search, since the name is often the part forgotten.
+
+let people = loadNames();
+let openPersonId = null;
+let namePhotos = [];          // photos on the form, before Save
+let editingPersonId = null;
+let nameQuery = '';
+let nameSpan = 'all';
+
+function renderNameThumbs(){ renderTray(els.nameThumbs, namePhotos, renderNameThumbs); }
+
+els.nameTakePhoto.addEventListener('click', () => els.nameCamera.click());
+els.nameAddImage.addEventListener('click', () => els.nameImages.click());
+async function attachName(input){
+  namePhotos.push(...await readPhotos(input));
+  renderNameThumbs();
+}
+els.nameCamera.addEventListener('change', () => attachName(els.nameCamera));
+els.nameImages.addEventListener('change', () => attachName(els.nameImages));
+
+function syncSaveName(){ els.saveName.disabled = !els.personName.value.trim(); }
+els.personName.addEventListener('input', syncSaveName);
+els.personName.addEventListener('keydown', e => {
+  if (e.key === 'Enter'){ e.preventDefault(); els.personDesc.focus(); }
+});
+
+function clearNameForm(){
+  namePhotos.forEach(img => URL.revokeObjectURL(img.url));
+  namePhotos = [];
+  els.personName.value = ''; els.personDesc.value = '';
+  renderNameThumbs(); syncSaveName();
+}
+
+function leaveNameEditing(){
+  editingPersonId = null;
+  els.nameEditBar.hidden = true;
+  els.saveName.textContent = 'Save';
+}
+
+els.cancelNameEdit.addEventListener('click', () => { leaveNameEditing(); clearNameForm(); });
+
+async function startNameEdit(person){
+  const typed = els.personName.value.trim() || els.personDesc.value.trim() || namePhotos.length;
+  if (typed && !confirm('Replace what you have typed with this person?')) return;
+  const loaded = [];
+  for (const key of imagesOf(person)){
+    try {
+      const blob = await getImage(key);
+      if (blob) loaded.push({ key, blob, url: URL.createObjectURL(blob) });
+    } catch {}
+  }
+  clearNameForm();
+  els.personName.value = person.name; els.personDesc.value = person.description || '';
+  namePhotos = loaded;
+  editingPersonId = person.id;
+  els.nameEditBar.hidden = false;
+  els.saveName.textContent = 'Update';
+  renderNameThumbs(); syncSaveName();
+  window.scrollTo(0, 0);
+  els.personName.focus();
+}
+
+// Same order of care as an idea's Save: photos first, then the record, and any
+// failure unwinds so the person just typed stays on screen to try again.
+els.saveName.addEventListener('click', async () => {
+  const name = els.personName.value.trim();
+  if (!name) return;
+  els.saveName.disabled = true;
+  const old = editingPersonId === null ? null : people.find(p => p.id === editingPersonId) || null;
+  const before = old ? imagesOf(old) : [];
+  const fresh = [];
+  try {
+    for (const img of namePhotos){
+      await putImage(img.key, img.blob);
+      if (!before.includes(img.key)) fresh.push(img.key);
+    }
+  } catch {
+    if (fresh.length) deleteImages(fresh).catch(() => {});
+    say('Could not save — try again');
+    syncSaveName();
+    return;
+  }
+  const keys = namePhotos.map(img => img.key);
+  const fields = { name, description: els.personDesc.value.trim(), images: keys };
+  let at = -1;
+  if (old){
+    // Keeps its place and the day they were met.
+    at = people.indexOf(old);
+    people[at] = { ...old, ...fields };
+  } else {
+    people.unshift({ id: Date.now(), ts: Date.now(), ...fields });
+  }
+  try {
+    saveNames(people);
+  } catch {
+    if (old) people[at] = old; else people.shift();
+    if (fresh.length) deleteImages(fresh).catch(() => {});
+    say('Could not save — try again');
+    syncSaveName();
+    return;
+  }
+  const gone = before.filter(k => !keys.includes(k));
+  if (gone.length){ forgetUrls(gone); deleteImages(gone).catch(() => {}); }
+  const wasEdit = !!old;
+  leaveNameEditing();
+  clearNameForm(); renderNames();
+  say(wasEdit ? 'Updated' : 'Saved');
+  // Drop the keyboard so the list, with the new entry at the top, is visible.
+  els.personName.blur(); els.personDesc.blur();
+});
+
+function deletePerson(person){
+  if (!confirm(`Delete ${person.name}?`)) return;
+  const kept = people.filter(p => p.id !== person.id);
+  // Record first, photos second, for the same reason as "Clear shared".
+  try {
+    saveNames(kept);
+  } catch {
+    say('Could not delete — try again');
+    return;
+  }
+  people = kept;
+  const keys = imagesOf(person);
+  forgetUrls(keys);
+  deleteImages(keys).catch(() => {});
+  renderNames();
+}
+
+// Stored photos shown in the list, read from IndexedDB once and kept as object
+// URLs so a search, which redraws the list on every keystroke, does not re-read them.
+const photoUrls = new Map();
+
+async function photoUrl(key){
+  if (photoUrls.has(key)) return photoUrls.get(key);
+  let url = null;
+  try {
+    const blob = await getImage(key);
+    if (blob) url = URL.createObjectURL(blob);
+  } catch {}
+  photoUrls.set(key, url);
+  return url;
+}
+
+function forgetUrls(keys){
+  for (const key of keys){
+    const url = photoUrls.get(key);
+    if (url) URL.revokeObjectURL(url);
+    photoUrls.delete(key);
+  }
+}
+
+// A photo whose data has gone missing is dropped from view rather than shown broken.
+function fillPhotos(root){
+  root.querySelectorAll('img[data-key]').forEach(async img => {
+    const url = await photoUrl(img.dataset.key);
+    if (url) img.src = url; else img.remove();
+  });
+}
+
+els.nameSearch.addEventListener('input', () => { nameQuery = els.nameSearch.value; renderNames(); });
+els.nameSpans.addEventListener('click', e => {
+  const btn = e.target.closest('button[data-span]');
+  if (!btn) return;
+  nameSpan = btn.dataset.span;
+  els.nameSpans.querySelectorAll('button').forEach(b =>
+    b.setAttribute('aria-pressed', String(b === btn)));
+  renderNames();
+});
+
+function renderNames(){
+  const shown = filterNames(people, nameQuery, nameSpan);
+  const filtering = shown.length !== people.length;
+  els.nameHeading.textContent = !people.length ? 'Names'
+    : filtering ? `Names · ${shown.length} of ${people.length}` : `Names · ${people.length}`;
+  els.nameFind.hidden = !people.length;
+  els.nameList.innerHTML = '';
+  if (!people.length){
+    els.nameList.innerHTML = '<li class="empty">Nothing yet. Type or dictate a name above.</li>';
+    return;
+  }
+  if (!shown.length){
+    els.nameList.innerHTML = '<li class="empty">No one matches.</li>';
+    return;
+  }
+  for (const person of shown){
+    const open = person.id === openPersonId;
+    const keys = imagesOf(person);
+    const li = document.createElement('li');
+    li.className = open ? '' : 'collapsed';
+    li.innerHTML = `
+      <div class="person">
+        ${keys.length ? `<img class="face" data-key="${escapeHtml(keys[0])}" alt="">` : ''}
+        <div class="person-text">
+          <div class="meta"><span>${shortStamp(person.ts)}</span></div>
+          <div class="idea-title">${escapeHtml(person.name)}</div>
+          ${person.description ? `<div class="idea-body">${escapeHtml(person.description)}</div>` : ''}
+        </div>
+      </div>
+      ${open ? `${keys.length ? `<div class="photos">${keys.map(k =>
+          `<img data-key="${escapeHtml(k)}" alt="">`).join('')}</div>` : ''}
+        <div class="note-actions">
+          <button type="button" data-act="edit">Edit</button>
+          <button type="button" class="quiet" data-act="delete">Delete</button>
+        </div>` : ''}`;
+    li.addEventListener('click', e => {
+      const act = e.target.closest('button') && e.target.closest('button').dataset.act;
+      if (act === 'edit'){ startNameEdit(person); return; }
+      if (act === 'delete'){ deletePerson(person); return; }
+      openPersonId = open ? null : person.id;
+      renderNames();
+    });
+    els.nameList.appendChild(li);
+    fillPhotos(li);
+  }
+}
+
 // ---- Which screen -----------------------------------------------------------
 // The opening screen is the bare URL; each of the other two is a hash, so the
 // phone's own Back button steps from a screen to the opening one instead of
@@ -578,13 +817,15 @@ let shown = null;
 let pushed = false;   // true once we have added a history entry ourselves
 
 function apply(){
-  const view = location.hash === '#idea' ? 'idea' : location.hash === '#note' ? 'note' : 'home';
+  const view = ({ '#idea': 'idea', '#note': 'note', '#name': 'name' })[location.hash] || 'home';
   els.home.hidden = view !== 'home';
   els.back.hidden = view === 'home';
   els.ideaView.hidden = view !== 'idea';
   els.noteView.hidden = view !== 'note';
+  els.nameView.hidden = view !== 'name';
   // Idea capture used to open with the title focused; keep that. Notes wait for a
-  // tap on the field, as asked.
+  // tap on the field, as asked. Names wait too: half the visits are to look
+  // someone up, and a keyboard springing open would cover the list.
   if (view === 'idea' && shown !== 'idea') els.title.focus();
   shown = view;
 }
@@ -592,6 +833,7 @@ function apply(){
 function go(view){ pushed = true; location.hash = view; }
 els.goIdea.addEventListener('click', () => go('idea'));
 els.goNote.addEventListener('click', () => go('note'));
+els.goName.addEventListener('click', () => go('name'));
 els.back.addEventListener('click', () => {
   if (pushed){ history.back(); return; }
   // Landed straight on a screen (a reload, say): no entry of ours to step back to.
@@ -601,6 +843,7 @@ els.back.addEventListener('click', () => {
 window.addEventListener('hashchange', apply);
 
 renderNotes();
+renderNames();
 apply();
 
 render();

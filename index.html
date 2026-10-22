@@ -40,11 +40,12 @@
 
   input,textarea{width:100%;border:0;background:transparent;color:var(--ink);
     outline:none;font-family:inherit;resize:none}
-  #title{font-weight:400;font-size:26px;line-height:1.3;padding:10px 48px 10px 0;border-bottom:2px solid var(--ink)}
-  #description{font-weight:400;font-size:18px;line-height:1.45;padding:10px 0;min-height:22vh;
+  #title,#personName{font-weight:400;font-size:26px;line-height:1.3;padding:10px 48px 10px 0;border-bottom:2px solid var(--ink)}
+  #description,#personDesc{font-weight:400;font-size:18px;line-height:1.45;padding:10px 0;min-height:22vh;
     border-bottom:1px solid var(--line)}
   #with{font-weight:400;font-size:16px;line-height:1.4;padding:10px 0;border-bottom:1px solid var(--line)}
-  #title:focus,#description:focus,#with:focus{border-bottom-color:var(--blue)}
+  #title:focus,#description:focus,#with:focus,
+  #personName:focus,#personDesc:focus{border-bottom-color:var(--blue)}
   ::placeholder{color:var(--mute);font-weight:300}
 
   .row{display:flex;gap:10px;align-items:center;margin-top:14px;flex-wrap:wrap}
@@ -57,12 +58,12 @@
   button.quiet{border-color:transparent;color:var(--mute);padding-left:8px;padding-right:8px}
   button:focus-visible{outline:3px solid var(--blue);outline-offset:2px}
 
-  #thumbs{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
-  #thumbs figure{margin:0;position:relative}
-  #thumbs img{width:72px;height:72px;object-fit:cover;border-radius:8px;display:block}
+  .thumbs{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+  .thumbs figure{margin:0;position:relative}
+  .thumbs img{width:72px;height:72px;object-fit:cover;border-radius:8px;display:block}
   /* 32px, not 24: a delete control on a phone has to be hittable with a thumb.
      Still reads as a small badge against the 72px thumbnail. */
-  #thumbs button{position:absolute;top:-8px;right:-8px;padding:0;width:32px;height:32px;
+  .thumbs button{position:absolute;top:-8px;right:-8px;padding:0;width:32px;height:32px;
     line-height:1;border-radius:50%;background:var(--ink);color:var(--paper);
     font-size:17px;font-weight:700}
 
@@ -92,7 +93,8 @@
   #bar{height:36px;margin-bottom:8px;display:flex;align-items:center}
   #back{padding:6px 12px 6px 6px;border-color:transparent;color:var(--mute);font-weight:500}
   #home{display:flex;flex-direction:column;gap:16px;min-height:calc(100vh - 120px);min-height:calc(100dvh - 120px)}
-  button.big{flex:1;min-height:30vh;border-radius:28px;padding:24px;text-align:left;
+  /* Three share the screen, so each gives up some height to keep all in view. */
+  button.big{flex:1;min-height:20vh;border-radius:28px;padding:24px;text-align:left;
     display:flex;flex-direction:column;justify-content:center;align-items:flex-start;
     font-size:36px;font-weight:600}
   button.big small{font-size:15px;font-weight:400;color:var(--mute);margin-top:6px}
@@ -107,6 +109,19 @@
   .editbar{display:flex;align-items:center;justify-content:space-between;color:var(--mute);
     font-size:14px;margin-bottom:4px}
   .note-actions{display:flex;gap:10px;margin-top:12px}
+
+  /* Names: the capture fields, then search, then the list with a face beside each. */
+  #nameSearch{font-size:17px;padding:10px 0;margin-bottom:10px;border-bottom:1px solid var(--line)}
+  #nameSearch:focus{border-bottom-color:var(--blue)}
+  .spans{gap:6px;flex-wrap:nowrap;margin:0 0 12px}
+  .spans button{flex:1;font-size:14px;font-weight:500;padding:8px 4px;
+    border-color:var(--line);color:var(--mute)}
+  .spans button[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:var(--paper)}
+  .person{display:flex;gap:12px;align-items:flex-start}
+  .person-text{flex:1;min-width:0}
+  .face{width:56px;height:56px;border-radius:8px;object-fit:cover;flex:none;background:var(--line)}
+  .photos{display:flex;flex-direction:column;gap:8px;margin-top:12px}
+  .photos img{width:100%;max-height:70vh;object-fit:contain;border-radius:8px;display:block}
 </style>
 </head>
 <body>
@@ -120,6 +135,7 @@
   <section id="home">
     <button class="big" id="goIdea">Idea<small>Something to develop</small></button>
     <button class="big" id="goNote">Note<small>A reminder or a thought</small></button>
+    <button class="big" id="goName">Name<small>Someone you met</small></button>
   </section>
 
   <div id="ideaView" hidden>
@@ -128,7 +144,7 @@
     <input id="title" placeholder="Idea" autofocus enterkeyhint="next" autocomplete="off">
     <textarea id="description" placeholder="More, if there is more (optional)"></textarea>
     <input id="with" placeholder="with: (optional)" autocomplete="off">
-    <div id="thumbs"></div>
+    <div id="thumbs" class="thumbs"></div>
     <div class="row">
       <button id="takePhoto">Take photo</button>
       <button id="addImage">Add image</button>
@@ -163,6 +179,32 @@
     </div>
     <h2 id="noteHeading">Notes</h2>
     <ul id="noteList"></ul>
+  </div>
+
+  <div id="nameView" hidden>
+    <div id="nameEditBar" class="editbar" hidden><span>Editing this name</span><button id="cancelNameEdit" class="quiet">Cancel</button></div>
+    <input id="personName" placeholder="Name" enterkeyhint="next" autocomplete="off">
+    <textarea id="personDesc" placeholder="Where you met, what they do, anything that will help you remember"></textarea>
+    <div id="nameThumbs" class="thumbs"></div>
+    <div class="row">
+      <button id="nameTakePhoto">Take photo</button>
+      <button id="nameAddImage">Add image</button>
+      <input id="nameCamera" type="file" accept="image/*" capture="environment" hidden>
+      <input id="nameImages" type="file" accept="image/*" multiple hidden>
+      <span class="spacer"></span>
+      <button class="primary" id="saveName" disabled>Save</button>
+    </div>
+    <h2 id="nameHeading">Names</h2>
+    <div id="nameFind" hidden>
+      <input id="nameSearch" type="search" placeholder="Search names and descriptions" autocomplete="off">
+      <div class="row spans" id="nameSpans">
+        <button type="button" data-span="month" aria-pressed="false">Last month</button>
+        <button type="button" data-span="quarter" aria-pressed="false">3 months</button>
+        <button type="button" data-span="year" aria-pressed="false">12 months</button>
+        <button type="button" data-span="all" aria-pressed="true">All</button>
+      </div>
+    </div>
+    <ul id="nameList"></ul>
   </div>
 </main>
 <div class="toast" id="toast"></div>

@@ -36,6 +36,23 @@ export function saveNotes(notes){
   localStorage.setItem(NOTES_KEY, JSON.stringify(notes));
 }
 
+// Names: people met, kept on the phone like notes. Their photos share the image
+// database with ideas — keys are unique, so the two never collide.
+const NAMES_KEY = 'studio-names-v1';
+
+export function loadNames(){
+  try {
+    const raw = JSON.parse(localStorage.getItem(NAMES_KEY));
+    return Array.isArray(raw) ? raw : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveNames(names){
+  localStorage.setItem(NAMES_KEY, JSON.stringify(names));
+}
+
 let dbPromise = null;
 
 function db(){
