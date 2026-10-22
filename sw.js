@@ -1,12 +1,16 @@
 // Minimal offline cache so the installed app opens without signal.
 // CACHE names the store; changing it discards the old one on activate. Bumping
 // it is no longer how a new build reaches the phone — see the fetch handler.
-const CACHE = 'studio-ideas-v9';
+const CACHE = 'studio-ideas-v10';
 const FILES = ['./', './index.html', './app.js', './lib.js', './store.js', './sw.js',
   './manifest.json', './icon-192.png', './icon-512.png', './icon-maskable-512.png'];
 
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES)));
+  // 'reload' goes past the browser's own HTTP cache, which GitHub Pages lets keep
+  // a file for ten minutes: without it a fresh install could store last week's
+  // app.js beside this week's index.html.
+  e.waitUntil(caches.open(CACHE).then(c =>
+    c.addAll(FILES.map(f => new Request(f, { cache: 'reload' })))));
   self.skipWaiting();
 });
 
@@ -32,7 +36,10 @@ self.addEventListener('fetch', e => {
   e.respondWith(
     caches.open(CACHE).then(cache =>
       cache.match(req).then(cached => {
-        const fresh = fetch(req).then(res => {
+        // 'no-cache' asks the server every time (a tiny 304 when nothing changed).
+        // The plain fetch let the HTTP cache answer for each file separately, so
+        // Names shipped as a new page over old code: the button drew and did nothing.
+        const fresh = fetch(req, { cache: 'no-cache' }).then(res => {
           if (res && res.ok && res.type === 'basic') cache.put(req, res.clone());
           return res;
         }).catch(() => cached);
